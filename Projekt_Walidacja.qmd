@@ -1,0 +1,1725 @@
+---
+title: "Projekt z przedmiotu Metody Walidacji Modeli Statystycznych "
+author: "Brygida Juszczuk"
+format: 
+  html:
+    lang: pl                 # Ustawia język dokumentu na polski
+    theme: united            # Ustawia motyw wizualny dokumentu na "united"
+    self-contained: true     # Tworzy dokument samodzielny, bez zależności od zewnętrznych plików
+    author-title: Autor      # Ustawia tytuł sekcji autora na "Autor"
+    toc: true                # Włącza spis treści
+    toc-title: Spis treści   # Ustawia tytuł spisu treści na "Spis treści"
+    toc-location: left       # Ustawia lokalizację spisu treści na lewą stronę
+    warning: false           # Wyłącza wyświetlanie ostrzeżeń w dokumencie
+    message: false           # Wyłącza wyświetlanie komunikatów w dokumencie
+    echo: false              # Wyłącza wyświetlanie kodu źródłowego w dokumencie
+---
+
+## Cel badania
+
+Celem badania jest opracowanie optymalnego modelu klasyfikacyjnego z wykorzystaniem wybranych algorytmów uczenia maszynowego. W ramach analizy przeprowadzona zostanie walidacja modeli statystycznych, aby ocenić ich skuteczność i zdolność do generalizacji. Ostatecznym celem jest wybór najlepszego modelu do przewidywania satysfakcji pasażerów linii lotniczych na podstawie podanych predyktorów.
+
+## Opis zbioru
+
+Zbiór danych „***Loan_default***” pochodzi ze strony [kaggle.com](https://www.kaggle.com/datasets/teejmahal20/airline-passenger-satisfaction/data). Zawiera on informacje o 129 880 pasażerach linii lotniczej, u których na podstawie 23 zmiennych określono fakt czy dany pasażer jest usatysfakcjonowany z odbytego lotu czy też nie (24 zmienna).Ze względu na dużą liczebność zbioru danych, do analizy została wybrana losowa próbka zawierająca 20 000 obserwacji, co pozwoliło znacząco skrócić czas trenowania wszystkich modeli przy zachowaniu reprezentatywności danych. Wszystkie informacje odnośnie wykorzystywanych zmiennych w badaniu są przedstawione poniżej.
+
+-   `ID` - ID pasażera
+
+-   `Gender` - płeć
+
+    a\) Male
+
+    b\) Female
+
+-   `Age` - wiek
+
+-   `Customer Type` - typ klienta
+
+    a\) First-time
+
+    b\) Returning
+
+-   `Type of Travel` - cel lotu pasażera
+
+    a\) Business
+
+    b\) Personal
+
+-   `Class` - klasa podróży w samolocie, w której podróżuje pasażer
+
+    a\) Business
+
+    b\) Economy
+
+    c\) Economy Plus
+
+-   `Flight Distance` - odległość lotu
+
+-   `Departure Delay` - opóźnienie odlotu
+
+-   `Arrival Delay` - opóźnienie przylotu
+
+-   `Departure & Arrival Time Сonvenience` - wygoda w zakresie godzin odlotu i przylotu
+
+-   `Ease of Online Booking` - łatwość rezerwacji online
+
+-   `Check-in Service`- usługa odprawy – łatwość rejestracji
+
+-   `Online Boarding`- wygoda rejestracji online
+
+-   `Gate Location` - oszacowanie lokalizacji bramki
+
+-   `On-board Service` - ocena serwisu na pokładzie
+
+-   `Seat Comfort` - komfort siedzenia
+
+-   `Leg Room Service` - poziom komfortu miejsca na nogi
+
+-   `Cleanliness` - poziom czystości
+
+-   `Food and Drink`- jakość jedzenia i napojów
+
+-   `In-flight Service` - poziom obsługi na pokładzie
+
+-   `In-flight Wifi Service` - jakość Wi-Fi na pokładzie
+
+-   `In-flight Entertainment` - ocena rozrywki w trakcie lotu
+
+-   `Baggage Handling` - opinia na temat obsługi bagażu
+
+-   `Satisfaction` - poziom zadowonenia z linii lotniczej (zmienna objaśniana)
+
+    a\) Neutra or Dissatisfied
+
+    b\) Satisfied
+
+Zmienne takie jak **Departure & Arrival Time Convenience**, **Ease of Online Booking**, **Check-in Service**, **Online Boarding**, **Gate Location**, **On-board Service**, **Seat Comfort**, **Leg Room Service**, **Cleanliness**, **Food and Drink**, **In-flight Service**, **In-flight Wifi Service**, **In-flight Entertainment** oraz **Baggage Handling** to zmienne kategoryczne przyjmujące wartości w skali od 0 do 5, które odzwierciedlają ocenę różnych aspektów komfortu i jakości obsługi pasażera podczas podróży.
+
+## Czyszczenie danych
+
+Podczas przygotowywania zbioru danych do modelowania zostały podjęte następujące kroki:
+
+-   sprawdzenie brakow danych - w analizowanym zbiorze danych zmienna Arrival Delay zawierała 65 brakujących wartości, co stanowiło jedynie 0,3% całości danych. Ze względu na tak niewielką skalę braków zdecydowałam się na ich usunięcie, uznając, że imputacja nie jest najlepszym rozwiązaniem. W przypadku danych czasowych uzupełnianie braków mogłoby prowadzić do zniekształcenia rzeczywistych informacji, co negatywnie wpłynęłoby na wiarygodność wyników analizy.
+
+-   sprawdzenie duplikatów danych - w zbiorze nie znajdują się żadne duplikaty,
+
+-   usunięcie pierwszej kolumny ze zbioru, zawierała ona ID klienta, dane te nic nie wnosiły do modelowania
+
+-   zmiana typu zmiennych kategorycznych na *"factor".*
+
+```{r}
+library(rio)
+set.seed(2025)
+dane <- import("airline_passenger_satisfaction.csv")
+Dataset <- dane[sample(1:nrow(dane), 20000, replace = FALSE), ]
+```
+
+```{r, results='hide'}
+# Sprawdzanie braków danych
+colSums(is.na(Dataset))
+```
+
+```{r, results='hide'}
+# Czy są duplikaty
+Dataset[duplicated(Dataset), ]
+```
+
+```{r, results='hide'}
+# Usunięcie niepotrzebnych kolumn ze zbioru danych (ID pożyczki) - unikalna wartość dla każdej instancji)
+Dataset <- Dataset[-1]
+```
+
+```{r, results='hide'}
+# Zmiana nazw kolumn 
+library(dplyr)
+library(gridExtra)
+
+Dataset <- Dataset %>%
+  rename(
+    Customer_Type = `Customer Type`,
+    Type_of_Travel = `Type of Travel`,
+    Flight_Distance = `Flight Distance`,
+    Departure_Delay = `Departure Delay`,
+    Arrival_Delay = `Arrival Delay`,
+    Departure_and_Arrival_Time_Convenience = `Departure and Arrival Time Convenience`,
+    Ease_of_Online_Booking = `Ease of Online Booking`,
+    Check_in_Service = `Check-in Service`,
+    Online_Boarding = `Online Boarding`,
+    Gate_Location = `Gate Location`,
+    On_board_Service = `On-board Service`,
+    Seat_Comfort = `Seat Comfort`,
+    Leg_Room_Service = `Leg Room Service`,
+    Food_and_Drink = `Food and Drink`,
+    In_flight_Service = `In-flight Service`,
+    In_flight_Wifi_Service = `In-flight Wifi Service`,
+    In_flight_Entertainment = `In-flight Entertainment`,
+    Baggage_Handling = `Baggage Handling`
+  )
+
+```
+
+```{r, results='hide'}
+# Zmiana typu danych z charakter na factor 
+Dataset$Gender <- as.factor(Dataset$Gender)
+Dataset$Customer_Type <- as.factor(Dataset$Customer_Type)
+Dataset$Type_of_Travel <- as.factor(Dataset$Type_of_Travel)
+Dataset$Class <- as.factor(Dataset$Class)
+Dataset$Satisfaction <- as.factor(Dataset$Satisfaction)
+Dataset$Departure_and_Arrival_Time_Convenience <- as.factor(Dataset$Departure_and_Arrival_Time_Convenience)
+Dataset$Ease_of_Online_Booking <- as.factor(Dataset$Ease_of_Online_Booking)
+Dataset$Check_in_Service <- as.factor(Dataset$Check_in_Service)
+Dataset$Online_Boarding <- as.factor(Dataset$Online_Boarding)
+Dataset$Gate_Location <- as.factor(Dataset$Gate_Location)
+Dataset$On_board_Service <- as.factor(Dataset$On_board_Service)
+Dataset$Seat_Comfort <- as.factor(Dataset$Seat_Comfort)
+Dataset$Leg_Room_Service <- as.factor(Dataset$Leg_Room_Service)
+Dataset$Food_and_Drink <- as.factor(Dataset$Food_and_Drink)
+Dataset$In_flight_Service <- as.factor(Dataset$In_flight_Service)
+Dataset$In_flight_Wifi_Service <- as.factor(Dataset$In_flight_Wifi_Service)
+Dataset$In_flight_Entertainment <- as.factor(Dataset$In_flight_Entertainment)
+Dataset$Baggage_Handling <- as.factor(Dataset$Baggage_Handling)
+Dataset$Cleanliness <- as.factor(Dataset$Cleanliness)
+
+```
+
+```{r, results='hide'}
+Dataset <- na.omit(Dataset)
+```
+
+```{r, results='hide'}
+colSums(is.na(Dataset))
+```
+
+## Podstawowe statystyki zbioru
+
+Na początku sprawdźmy podstawowe statystyki dla zmiennych numerycznych.
+
+```{r}
+library(knitr)
+library(kableExtra)
+
+selected_columns <- Dataset %>% select(c(2,6,7,8))
+
+summary_stats <- selected_columns %>%
+  apply(2, summary) %>%
+  rbind(St.dev = apply(selected_columns, 2, sd)) %>%
+  round(2)
+
+rownames(summary_stats) <- c('minimum', 'kwantyl dolny', 'mediana', 'średnia', 'kwantyl górny', 'maksimum', 'odchylenie standardowe')
+
+# Prezentacja tabeli
+summary_stats %>%
+  kable() %>%
+  kable_styling(bootstrap_options = "responsive") %>%
+  column_spec(1, bold = TRUE)
+
+```
+
+Analiza statystyk opisowych pozwala na uzyskanie ogólnego obrazu danych i wskazanie interesujących zależności. W przypadku wieku pasażerów zauważalna jest szeroka rozpiętość – najmłodszy pasażer ma zaledwie 7 lat, natomiast najstarszy 85. Mediana wieku wynosi 40 lat, a średnia jest bardzo zbliżona (39,5), co sugeruje, że rozkład wieku jest stosunkowo symetryczny. Odchylenie standardowe na poziomie około 15 lat wskazuje na umiarkowaną zmienność tej cechy, co oznacza, że w badanej próbie znajdują się zarówno osoby młodsze, jak i starsze, ale bez wyraźnych skupisk ekstremalnych wartości.
+
+Dystans przebywany przez pasażerów w trakcie lotu charakteryzuje się znaczną zmiennością – najkrótszy lot wynosił zaledwie 31 kilometrów, natomiast najdłuższy niemal 5000 kilometrów (dokładnie 4983). Mediana długości lotu to 852 kilometry, jednak średnia jest znacznie wyższa i wynosi ponad 1187 kilometrów. Różnica między medianą a średnią, a także wysokie odchylenie standardowe (niemal 1000 km), sugerują prawoskośny rozkład danych, czyli obecność stosunkowo niewielkiej liczby bardzo długich lotów, które zawyżają wartość średnią. To może wskazywać na zróżnicowaną strukturę połączeń, obejmującą zarówno loty krajowe, jak i międzynarodowe.
+
+Jeśli chodzi o opóźnienia przy odlocie, dane wskazują, że większość lotów odbywa się zgodnie z rozkładem – mediana oraz dolny kwartyl mają wartość 0 minut. Niemniej jednak średnie opóźnienie wynosi aż 14,67 minuty, co oznacza, że część lotów jest znacznie spóźniona. Potwierdza to maksymalna zaobserwowana wartość opóźnienia przy odlocie – aż 1128 minut, czyli ponad 18 godzin. Tak duże odchylenie standardowe (prawie 38 minut) sugeruje dużą zmienność i obecność wartości odstających, które znacząco wpływają na średnią.
+
+Bardzo podobny wzorzec można zaobserwować w przypadku opóźnień przylotu. Tutaj również większość lotów przybywa punktualnie – zarówno dolny kwartyl, jak i mediana mają wartość 0 minut. Mimo to średnie opóźnienie wynosi 15,13 minut, a maksymalne sięga 1115 minut. To oznacza, że nawet jeśli większość podróży odbywa się zgodnie z planem, zdarzają się sytuacje, w których loty są znacznie opóźnione, co może być związane z czynnikami zewnętrznymi, takimi jak warunki pogodowe, problemy techniczne czy zakłócenia w ruchu lotniczym. Wysokie odchylenie standardowe w tej kategorii (38,30 minuty) potwierdza dużą zmienność danych.
+
+# Wizualizacja
+
+### Zmienne numeryczne
+
+Za pomocą histogramów sprawdźmy czy zmienne numeryczne posiadają symetryczne rozkłady.
+
+```{r fig.width=12, fig.height=10}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+long_data <- Dataset %>%
+  pivot_longer(cols = where(is.numeric))
+
+# Utworzenie histogramów dla każdej zmiennej numerycznej z różnymi kolorami
+ggplot(long_data, aes(x = value, fill = name)) +
+  geom_histogram(color = "black", bins = 30, show.legend = FALSE) +
+  facet_wrap(~ name, scales = "free") +
+  theme_minimal() +
+  labs(
+    title = "Histogramy dla każdej zmiennej numerycznej",
+    x = "Wartość",
+    y = "Częstotliwość"
+  ) +
+  theme(
+    plot.title = element_text(hjust = 0.5)
+  )
+```
+
+### Analiza histogramów
+
+Dane dotyczące pasażerów i ich podróży pozwalają na obserwację kilku istotnych wzorców, które mogą mieć wpływ na dalszą analizę.
+
+**Zmienne demograficzne (Age)**
+
+Większość pasażerów znajduje się w przedziale wiekowym 20–60 lat, przy czym największa grupa to osoby około 40. roku życia. Rozkład wieku jest względnie symetryczny, co sugeruje brak konieczności transformacji tej zmiennej. Pojedyncze wartości skrajne dotyczą pasażerów bardzo młodych oraz starszych. Dodatkowo stosunkowo niewielka liczba młodszych podróżnych może wskazywać na ograniczoną obecność dzieci w próbie.
+
+**Zmienne dotyczące dystansu lotu (Flight Distance)**
+
+Rozkład długości lotu jest silnie prawostronnie skośny – większość tras to loty krótkie, poniżej 1000 km. Choć żaden z lotów nie przekracza znacznie wartości 4000 km, niewielki odsetek z nich zbliża się do tej granicy. Sugeruje to dominację podróży krajowych lub regionalnych, przy czym tylko niewielka część lotów to podróże długodystansowe. W celu zmniejszenia skośności tej zmiennej warto rozważyć transformację logarytmiczną.
+
+**Zmienne dotyczące opóźnień (Departure_Delay i Arrival_Delay)**
+
+Histogramy przedstawiają duży rozrzut wartości dla zmiennych dotyczących opóźnień. Większość opóźnień wynosi do 20 minut, jednak występują również przypadki znacznie dłuższych przestojów, sięgających nawet kilkuset minut. Takie wartości odstające mogą znacząco wpływać na wyniki analizy, dlatego warto rozważyć ich obsługę, np. poprzez transformację zmiennych.
+
+W następnym kroku sprawdzimy za pomocą boxplotów, czy któraś ze zmiennych posiada elementy odstające.
+
+### Analiza Boxplotów
+
+::: panel-tabset
+### Age
+
+```{r}
+# Boxplot Visualization
+library(ggplot2)
+
+ggplot(Dataset, aes(y = Age))+
+  geom_boxplot(fill = "violet") +
+  ggtitle("Rozrzut zmiennej Age") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
+
+### Flight_Distance
+
+```{r}
+ggplot(Dataset, aes(y = Flight_Distance))+
+  geom_boxplot(fill = "violet") +
+  ggtitle("Rozrzut zmiennej Flight_Distance") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
+
+### Departure_Delay
+
+```{r}
+ggplot(Dataset, aes(y = Departure_Delay))+
+  geom_boxplot(fill = "violet") +
+  ggtitle("Rozrzut zmiennej Departure_Delay") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
+
+### Arrival_Delay
+
+```{r}
+ggplot(Dataset, aes(y = Arrival_Delay))+
+  geom_boxplot(fill = "violet") +
+  ggtitle("Rozrzut zmiennej Arrival_Delay") +
+  theme(plot.title = element_text(hjust = 0.5),
+        axis.ticks.x = element_blank(),
+        axis.text.x = element_blank())
+```
+:::
+
+**Wiek (Age):**
+
+Na wykresie pudełkowym przedstawiającym zmienną „Age” zauważalna jest względna symetria rozkładu. Większość danych mieści się w przedziale od około 25 do 55 lat, co sugeruje, że dominują osoby dorosłe w szerokim zakresie wieku. Wartości skrajne nie dominują, dlatego nie wymagają szczególnej ingerencji na etapie przygotowania danych.
+
+**Długość lotu (Flight Distance):**
+
+W przypadku zmiennej „Flight Distance” boxplot ujawnia obecność licznych wartości odstających po stronie wysokich wartości, co potwierdza silną prawoskośność rozkładu. Większość lotów koncentruje się na krótkich dystansach, a nieliczne, znacznie dłuższe loty odbiegają od głównego trendu. Wskazuje to na konieczność rozważenia transformacji tej zmiennej, np. logarytmicznej, celem zmniejszenia wpływu tych wartości na modele predykcyjne.
+
+**Opóźnienia odlotów i przylotów (Departure Delay, Arrival Delay):**
+
+Boxploty dla zmiennych opisujących opóźnienia pokazują dużą liczbę wartości odstających, szczególnie powyżej 100 minut. Mediana opóźnień wynosi 0, co oznacza, że ponad połowa lotów przebiega bez zakłóceń czasowych. Niemniej jednak, obecność pojedynczych, bardzo wysokich opóźnień może znacząco zaburzać analizę, dlatego warto rozważyć ich obróbkę (np. transformację).
+
+## Zmienne kategoryczne
+
+W tej części zaprezentujemy częstotliwość występowania poszczególnych kategorii dla zmiennych kategorycznych.
+
+::: panel-tabset
+### Gender
+
+```{r}
+library(ggplot2)
+ggplot(Dataset, aes(x = Gender, fill = Gender))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Gender")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+
+```
+
+### Customer_Type
+
+```{r}
+ggplot(Dataset, aes(x = Customer_Type, fill = Customer_Type))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Customer_Type")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Type_of_Travel
+
+```{r}
+ggplot(Dataset, aes(x = Type_of_Travel, fill = Type_of_Travel))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Type_of_Travel")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Class
+
+```{r}
+ggplot(Dataset, aes(x = Class , fill = Class ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Class ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Departure_and_Arrival_Time_Convenience
+
+```{r, fig.width=8, fig.height=6}
+
+ggplot(Dataset, aes(x = Departure_and_Arrival_Time_Convenience , fill = Departure_and_Arrival_Time_Convenience ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Ease_of_Online_Booking
+
+```{r}
+ggplot(Dataset, aes(x = Ease_of_Online_Booking , fill = Ease_of_Online_Booking ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Class ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Check_in_Service
+
+```{r}
+ggplot(Dataset, aes(x = Check_in_Service  , fill = Check_in_Service  ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Check_in_Service  ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Online_Boarding
+
+```{r}
+ggplot(Dataset, aes(x = Online_Boarding , fill = Online_Boarding ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Online_Boarding ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Gate_Location
+
+```{r}
+ggplot(Dataset, aes(x = Gate_Location , fill = Gate_Location ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Gate_Location ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### On_board_Service
+
+```{r}
+ggplot(Dataset, aes(x = On_board_Service , fill = On_board_Service ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej On_board_Service ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Seat_Comfort
+
+```{r}
+ggplot(Dataset, aes(x = Seat_Comfort , fill = Seat_Comfort ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Seat_Comfort ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Leg_Room_Service
+
+```{r}
+ggplot(Dataset, aes(x = Leg_Room_Service , fill = Leg_Room_Service ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Leg_Room_Service ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Food_and_Drink
+
+```{r}
+ggplot(Dataset, aes(x = Food_and_Drink , fill = Food_and_Drink ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Food_and_Drink ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### In_flight_Service
+
+```{r}
+ggplot(Dataset, aes(x = In_flight_Service  , fill = In_flight_Service  ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej In_flight_Service ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### In_flight_Wifi_Service
+
+```{r}
+ggplot(Dataset, aes(x = In_flight_Wifi_Service  , fill = In_flight_Wifi_Service  ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej In_flight_Wifi_Service ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### In_flight_Entertainment
+
+```{r}
+ggplot(Dataset, aes(x = In_flight_Entertainment , fill = In_flight_Entertainment ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej In_flight_Entertainment ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Baggage_Handling
+
+```{r}
+ggplot(Dataset, aes(x = Baggage_Handling , fill = Baggage_Handling ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Baggage_Handling ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Cleanliness
+
+```{r}
+ggplot(Dataset, aes(x = Cleanliness , fill = Cleanliness ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Cleanliness ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+
+### Satisfaction
+
+```{r}
+ggplot(Dataset, aes(x = Satisfaction , fill = Satisfaction ))+
+  geom_bar() + 
+  ggtitle("Częstotliwości kategorii dla zmiennej Satisfaction ")+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  ylab("Częstotliwość") +
+  geom_text(stat = "count", aes(label = ..count.., y = ..count..), vjust = 1.25)
+```
+:::
+
+-   **Gender:** Wykres przedstawiający rozkład płci wśród pasażerów ukazuje równomierny udział kobiet i mężczyzn, z niewielką przewagą jednej z grup (w zależności od danych). Tak zrównoważony rozkład zmiennej pozwala na bezpośrednie wykorzystanie jej w modelowaniu bez konieczności dodatkowego balansowania danych .
+
+-   **Customer Type:** Analiza typu klienta pokazuje, że dominującą grupą są pasażerowie powracający. Oznacza to, że większość klientów korzysta z usług linii lotniczej wielokrotnie, co może wskazywać na pewien poziom lojalności. W modelowaniu warto uwzględnić, że nowi klienci są mniej liczni i mogą przejawiać inne wzorce zachowań .
+
+-   **Type of Travel:** Na wykresie przedstawiającym cel podróży widać wyraźną dominację lotów biznesowych nad prywatnymi. Taki rozkład sugeruje, że wyniki satysfakcji mogą być bardziej reprezentatywne dla pasażerów podróżujących służbowo, co powinno być brane pod uwagę przy interpretacji wyników analizy i ewentualnej segmentacji klientów .
+
+-   **Class:** Rozkład klas podróży pokazuje, że największy udział mają pasażerowie klasy ekonomicznej oraz ekonomicznej plus, podczas gdy podróże klasą biznes są znacznie rzadsze. Zmienne związane z komfortem i poziomem usług mogą zatem być silnie powiązane z klasą, co należy uwzględnić przy analizie współzmienności i przy modelowaniu satysfakcji .
+
+-   **Departure and Arrival Time Convenience:** W tej kategorii przedstawiono subiektywną ocenę wygody godzin odlotu i przylotu. Wykres ujawnia, że duża część pasażerów była umiarkowanie lub bardzo zadowolona z zaplanowanych godzin podróży, choć pojawiają się też mniej pozytywne opinie. Może to wskazywać na istotną rolę harmonogramu w ogólnej ocenie doświadczenia lotniczego.
+
+-   **Ease of Online Booking:** Rozkład tej zmiennej sugeruje, że większość pasażerów oceniła proces rezerwacji online jako prosty lub bardzo prosty. Nieliczne niższe oceny mogą wynikać z trudności technicznych lub nieintuicyjnych interfejsów, co może być cenną wskazówką dla działów IT i UX.
+
+-   **Check-in Service:** Ocena usługi odprawy wskazuje na ogólne zadowolenie klientów – przewaga wyższych ocen świadczy o sprawnym procesie odprawy. Jednak obecność ocen niskich sugeruje, że warto przyjrzeć się czynnikom wpływającym na negatywne doświadczenia, np. długim kolejkom lub błędom systemowym.
+
+-   **Online Boarding:** Zmienna dotycząca odprawy online została przeważnie oceniona wysoko, co świadczy o rosnącej roli cyfrowych rozwiązań w procesie obsługi pasażerów. Wysoka satysfakcja w tym obszarze może pozytywnie wpływać na lojalność klientów.
+
+-   **Gate Location:** Oceny lokalizacji bramek są bardziej zróżnicowane – część pasażerów jest zadowolona, ale pojawiają się również niezadowolenie. Może to świadczyć o słabym oznakowaniu, dużych odległościach lub braku informacji na lotniskach. Wpływ tej zmiennej może być istotny dla ogólnego komfortu podróży.
+
+-   **On-board Service:** Rozkład ocen usług pokładowych jest generalnie pozytywny, co sugeruje dobrą jakość obsługi załogi. Ta zmienna może być silnym predyktorem satysfakcji, szczególnie u klientów wymagających, np. z klasy biznesowej.
+
+-   **Seat Comfort:** Komfort siedzenia jest różnie oceniany, ale dominują raczej średnie i pozytywne oceny. Ponieważ komfort fizyczny ma duży wpływ na ogólne wrażenie z podróży, warto uwzględnić tę zmienną jako istotny czynnik w modelu predykcyjnym.
+
+-   **Leg Room Service:** Oceny przestrzeni na nogi są umiarkowane – część pasażerów wyraża zadowolenie, ale też dość liczna grupa daje oceny negatywne. Jest to ważna informacja, zwłaszcza dla osób podróżujących na dłuższych trasach, gdzie komfort siedzenia staje się bardziej istotny.
+
+-   **Food and Drink:** Jakość jedzenia i napojów również uzyskuje zróżnicowane oceny. Choć część klientów jest zadowolona, widać też stosunkowo dużo ocen przeciętnych. Może to wskazywać na potrzebę poprawy w tym obszarze, zwłaszcza dla pasażerów klasy ekonomicznej.
+
+-   **In-flight Service:** Poziom ogólnej obsługi podczas lotu jest oceniany pozytywnie przez większość klientów. To kolejna zmienna związana z bezpośrednim kontaktem z personelem, która może znacząco wpływać na końcową ocenę satysfakcji.
+
+-   **In-flight Wifi Service:** Ocena jakości Wi-Fi na pokładzie jest zróżnicowana, z zauważalną obecnością ocen niskich. Pokazuje to, że technologia pokładowa nadal stanowi wyzwanie dla linii lotniczych i może wpływać na ocenę komfortu podróży, szczególnie wśród pasażerów biznesowych.
+
+-   **In-flight Entertainment:** W przypadku rozrywki pokładowej widać umiarkowane zadowolenie. Niektórzy pasażerowie zgłaszają niezadowolenie, co może wynikać z ograniczonej oferty filmowej, problemów technicznych lub braku systemów rozrywki na krótszych trasach.
+
+-   **Baggage Handling:** Obsługa bagażu uzyskuje przeważnie pozytywne oceny, co jest korzystne dla linii lotniczej – zadowolenie z tego obszaru ma wpływ na ogólne postrzeganie jakości usług, zwłaszcza w sytuacjach stresujących, takich jak opóźnienia czy zagubienie bagażu.
+
+-   **Satisfaction** (zmienna objaśniana) Wykres pokazuje podział na pasażerów zadowolonych oraz neutralnych lub niezadowolonych. Przewaga jednej z grup daje wstępny obraz tego, jak skutecznie linia spełnia oczekiwania klientów i może służyć do oceny skuteczności modeli predykcyjnych.
+
+## Macierz korelacji
+
+Struktura zależności liniowej zmiennych numerycznych przedstawiona zostanie w postaci macierzy korelacji.
+
+```{r}
+library(ggcorrplot)
+
+# Twoja macierz korelacji 
+Correlation_Variables_numeric <- Dataset %>%
+  select_if(is.numeric)
+
+Correlation_matrix_numeric <- round(cor(Correlation_Variables_numeric, method = "spearman"), 2)
+p.mat_coefficient <- cor_pmat(Correlation_Variables_numeric)
+
+# Poprawiona wizualizacja
+ggcorrplot(Correlation_matrix_numeric,
+           lab = TRUE,                # pokazuj wartości korelacji
+           p.mat = p.mat_coefficient,
+           type = "lower",            # pokazuje tylko dolną połowę
+           lab_size = 3,              # zmniejsz/zwieksz czcionkę liczb
+           tl.cex = 10,               # zmień rozmiar nazw zmiennych
+           tl.srt = 45,               # obrót etykiet zmiennych (np. 45 stopni)
+           colors = c("blue", "white", "magenta")) # kolorystyka
+
+```
+
+Macierz korelacji została opracowana dla wszystkich zmiennych liczbowych z wykorzystaniem współczynnika korelacji rang Spearmana. Ten rodzaj korelacji jest bardziej odporny na wartości odstające oraz lepiej oddaje relacje nieliniowe niż klasyczny współczynnik Pearsona. Na wykresie przedstawiono jedynie dolną trójkątną część macierzy, co poprawia czytelność i eliminuje powielanie informacji.
+
+Przedstawiona macierz korelacji obrazuje zależności liniowe między czterema zmiennymi liczbowymi. Najsilniejszą i najbardziej zauważalną zależność obserwujemy między opóźnieniem odlotu (Departure_Delay) a opóźnieniem przylotu (Arrival_Delay) – współczynnik korelacji wynosi 0.74, co wskazuje na silną dodatnią korelację. Oznacza to, że im większe opóźnienie podczas startu, tym większe prawdopodobieństwo opóźnionego lądowania.
+
+Pozostałe zmienne nie wykazują istotnych korelacji. Flight_Distance i Age są praktycznie niezależne od opóźnień, co potwierdzają niskie wartości współczynników korelacji (bliskie zera). Między wiekiem pasażera a długością lotu korelacja wynosi 0.08, co oznacza brak istotnego związku liniowego. Również korelacja między wiekiem a opóźnieniem przylotu (-0.02) jest pomijalna.
+
+Podsumowując, istotna zależność dotyczy tylko relacji między czasem startu i przylotu, co jest zgodne z intuicją – opóźnienia na początku podróży mają bezpośredni wpływ na jej zakończenie. Pozostałe zmienne można traktować jako niezależne, co zmniejsza ryzyko współliniowości w dalszych analizach statystycznych.
+
+# Mdelowanie
+
+## Przetwarzanie danych do modelowania
+
+Wyniki modeli będą oceniane na podstawie następujących metryk:
+
+1.  **Macierzy konfuzji**
+
+| Reczywista | Predykowana Klasa 0 | Predykowana Klasa 1 |
+|------------|---------------------|---------------------|
+| Klasa 0    | TN                  | FP                  |
+| Klasa 1    | FN                  | TP                  |
+
+-   True Positive (TP): Liczba przypadków, w których model poprawnie przewidział pozytywną klasę.
+
+-   True Negative (TN): Liczba przypadków, w których model poprawnie przewidział negatywną klasę.
+
+-   False Positive (FP): Liczba przypadków, w których model błędnie przewidział pozytywną klasę (fałszywie pozytywne).
+
+-   False Negative (FN): Liczba przypadków, w których model błędnie przewidział negatywną klasę (fałszywie negatywne).
+
+2.  **Accuracy (dokładność)** — odsetek poprawnie sklasyfikowanych obserwacji spośród wszystkich danych. Mierzy ogólną trafność modelu, choć może być mniej miarodajna przy niezbalansowanych klasach.
+
+$$\text{Accuracy} = \frac{TP + TN}{TP + TN + FP + FN} $$
+
+3.  **Precision (precyzja)** — stosunek prawidłowo przewidzianych pozytywnych przypadków do wszystkich przypadków oznaczonych przez model jako pozytywne. Ważna, gdy istotne jest ograniczenie fałszywych alarmów.
+
+$$\text{Precision} = \frac{TP}{TP + FP}$$
+
+4.  **Recall (czułość)** — stosunek prawidłowo wykrytych pozytywnych przypadków do wszystkich faktycznie pozytywnych. Kluczowa w sytuacjach, gdzie ważne jest minimalizowanie pominięć (false negatives).
+
+$$\text{Recall} = \frac{TP}{TP + FN}$$
+
+5.  **F1-score** — średnia harmoniczna precyzji i czułości, łącząca oba aspekty w jedną, zbalansowaną miarę skuteczności.
+
+$$\text{F1-score} = 2 \cdot \frac{\text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$$
+
+## Przetwarzanie danych do modelowania
+
+Przed budową modeli klasyfikacyjnych przeprowadzono odpowiednie przygotowanie danych. Zbiór danych został podzielony w proporcji 80% na zbiór treningowy i 20% na zbiór testowy, co umożliwia ocenę zdolności modelu do generalizacji na nieznanych danych.
+
+Wszystkie operacje przetwarzania wstępnego zostały wykonane wyłącznie na zbiorze treningowym, aby uniknąć wycieku informacji do zbioru testowego. Zastosowano następujące kroki:
+
+-   Transformacja logarytmiczna została przeprowadzona dla zmiennych `Flight_Distance`, `Departure_Delay` oraz `Arrival_Delay`, w celu redukcji ich asymetrycznych rozkładów i zwiększenia zgodności z założeniami niektórych algorytmów.
+
+-   One-hot encoding został użyty do zakodowania zmiennych kategorycznych, co umożliwiło ich reprezentację w postaci - numerycznej.
+
+-   Normalizacja zmiennych numerycznych została przeprowadzona w celu ujednolicenia skali predyktorów, co jest istotne zwłaszcza w przypadku algorytmów opartych na odległościach lub wrażliwych na rozrzut danych (np. SVM).
+
+Tak przygotowany zbiór treningowy posłużył do budowy i strojenia modeli, natomiast zbiór testowy został wykorzystany wyłącznie do ich końcowej oceny.
+
+Zmienna kategoryczna `Satisfaction`, będąca celem klasyfikacji, charakteryzuje się w miarę symetrycznym rozkładem klas, z proporcją około 56% do 44%. W związku z tym nie zaistniała potrzeba stosowania technik balansowania danych.
+
+```{r}
+library(tidymodels)
+library(ggplot2)
+library(recipes)
+library(themis)
+library(rsample)
+
+set.seed(2025)
+
+# Tworzymy najpierw zbiór treningowy i testowy
+split_initial <- initial_split(Dataset, prop = 0.8, strata = Satisfaction)
+train_set <- training(split_initial)
+test_set <- testing(split_initial)
+
+
+# Recipe (wspolny dla wszystkich modeli)
+recipe <- recipe(Satisfaction ~ ., data = train_set) |>
+  step_log(c("Flight_Distance", "Departure_Delay", "Arrival_Delay"), offset = 1) |>     # transformacja logarytmiczna
+  step_dummy(all_nominal_predictors()) |>                                               # one-hot encoding
+  step_normalize(all_numeric_predictors())                                            # normalizacja
+
+
+```
+
+```{r}
+evaluate_model <- function(model_fit, val_data, truth_col) {
+  truth_col <- rlang::enquo(truth_col)
+
+  preds <- predict(model_fit, new_data = val_data, type = "prob") %>%
+    bind_cols(predict(model_fit, new_data = val_data)) %>%
+    bind_cols(val_data %>% dplyr::select(!!truth_col))
+
+  # Definicja zestawu metryk
+  metric_set_all <- metric_set(accuracy, precision, recall, f_meas)
+
+  metrics_vals <- metric_set_all(preds, truth = !!truth_col, estimate = .pred_class)
+  cm <- conf_mat(preds, truth = !!truth_col, estimate = .pred_class)
+
+  list(metrics = metrics_vals, confusion_matrix = cm)
+}
+```
+
+## Regresja Logistyczna
+
+Regresja logistyczna to technika uczenia maszynowego stosowana głównie do zadań klasyfikacji binarnej. Jest oparta na modelu liniowym, który przewiduje prawdopodobieństwo przynależności obserwacji do danej klasy, korzystając z funkcji logistycznej. W procesie treningu, parametry modelu są dostosowywane tak, aby minimalizować różnicę między przewidywanymi a rzeczywistymi wartościami klasy.
+
+```{r}
+# Logistic Regression
+logistic_model <- logistic_reg() %>%
+  set_engine("glm") %>%
+  set_mode("classification")
+
+logistic_wf <- workflow() %>%
+  add_model(logistic_model) %>%
+  add_recipe(recipe)
+
+logistic_fit <- fit(logistic_wf, data = train_set)
+
+```
+
+```{r}
+results_logistic_train <- evaluate_model(logistic_fit, train_set, truth_col = "Satisfaction")
+
+results_logistic <- evaluate_model(logistic_fit, test_set, truth_col = "Satisfaction")
+```
+
+W ramach projektu model regresji logistycznej został przetestowany zarówno przed tuningiem hiperparametrów, jak i po jego przeprowadzeniu. Celem tuningu była optymalizacja działania modelu poprzez dobór odpowiednich wartości parametrów w celu poprawy jakości predykcji.
+
+**Porównanie metryk na zbiorze treningowym i testowym**
+
+```{r}
+library(dplyr)
+library(knitr)
+library(kableExtra)
+
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics <- results_logistic_train$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics <- results_logistic$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics <- left_join(train_metrics, test_metrics, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p1 <- autoplot(results_logistic_train$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p2 <- autoplot(results_logistic$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Wyniki uzyskane przed tuningiem wskazywały na bardzo dobre dopasowanie modelu. Dokładność klasyfikacji (accuracy) na zbiorze testowym wyniosła 92,9%, co oznacza, że niemal 93% obserwacji zostało poprawnie sklasyfikowanych. Precyzja modelu (precision) osiągnęła wartość 93,33%, co wskazuje, że spośród wszystkich przypadków zaklasyfikowanych jako pozytywne, ponad 93% było rzeczywiście poprawnych. Czułość modelu (recall) wyniosła 94,12%, co oznacza, że model poprawnie wykrył niemal 93% rzeczywistych przypadków pozytywnych. Z kolei F1-score, czyli średnia harmoniczna precyzji i czułości, przyjął wartość 93,72%, co świadczy o dobrze zbalansowanej skuteczności modelu.
+
+**Tuning hiperparametrów**
+
+W celu poprawy jakości klasyfikacji przeprowadzono tuning hiperparametrów regresji logistycznej z wykorzystaniem biblioteki glmnet, która umożliwia modelowanie z regularyzacją. Zastosowano podejście siatki regularnej oraz 10-krotną walidację krzyżową w celu oceny skuteczności poszczególnych konfiguracji.
+
+Dostosowywane były dwa kluczowe hiperparametry:
+
+-   `penalty` – współczynnik regularyzacji, odpowiadający za karę nakładaną na złożoność modelu. Wpływa na wielkość współczynników regresji, zapobiegając ich nadmiernemu dopasowaniu. Testowano wartości logarytmiczne z zakresu od 10⁻² do 1.
+
+-   `mixture` – parametr określający typ regularyzacji. Przyjmuje wartości od 0 do 1, gdzie 0 oznacza czystą regresję grzbietową (ridge), 1 – regresję LASSO, a wartości pośrednie – kombinację obu (elastic net). Pozwala to na elastyczne podejście do doboru cech.
+
+Dla każdego z tych parametrów wygenerowano 5 poziomów, co łącznie dało 25 kombinacji. Każda konfiguracja była oceniana przy użyciu metryk: accuracy, precision, recall oraz F1-score. Dzięki temu możliwe było wybranie najlepszego zestawu parametrów, który zapewniał wysoką skuteczność modelu oraz dobre zrównoważenie między precyzją a czułością.
+
+```{r}
+### Regresja Logistyczna - tuning
+
+logistic_model_tuning <- logistic_reg(
+  penalty = tune(),     # regularyzacja
+  mixture = tune()      
+) %>%
+  set_engine("glmnet") %>%
+  set_mode("classification")
+
+log_wf_tuning <- workflow() %>%
+  add_model(logistic_model_tuning) %>%
+  add_recipe(recipe)
+
+```
+
+```{r}
+grid_log <- grid_regular(
+  penalty(range = c(-2, 0)),    
+  mixture(range = c(0, 1)),
+  levels = 5
+)
+```
+
+```{r}
+# set.seed(2025)
+# folds_log <- vfold_cv(train_set, v = 10)
+# 
+# tuned_log <- tune_grid(
+#   log_wf_tuning,
+#   resamples = folds_log,
+#   grid = grid_log,
+#   metrics = metric_set(accuracy, precision, recall, f_meas)
+# )
+```
+
+```{r}
+#saveRDS(tuned_log,"tuned_log.rds")
+tuned_log <- readRDS("tuned_log.rds")
+```
+
+```{r}
+best_log <- select_best(tuned_log, "accuracy")
+final_log_wf <- finalize_workflow(log_wf_tuning, best_log)
+final_log_fit <- fit(final_log_wf, data = train_set)
+```
+
+```{r}
+results_logistic_train_tuning <- evaluate_model(final_log_fit, train_set, truth_col = Satisfaction)
+results_logistic_tuning <- evaluate_model(final_log_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym po tuningu**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics2 <- results_logistic_train_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics2 <- results_logistic_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics2 <- left_join(train_metrics2, test_metrics2, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics2 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+p3 <- autoplot(results_logistic_train_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p4 <- autoplot(results_logistic_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p3, p4, ncol = 2)
+```
+
+Po dokonaniu tuningu hiperparametrów nastąpiła nieznaczny spadek niektórych wyników. Dokładność spadł do 91,4%, a czułość do 92,96%, co świadczy o tym, że tuning nie polepszył skuteczności modelu. Precyzja modelu spadła nieznacznie do 91.85%, co może oznaczać, że model nieco częściej błędnie klasyfikował przypadki negatywne jako pozytywne. Wartość F1-score po tuningu wyniosła 92,4% i była praktycznie taka sama jak przed tuningiem, co potwierdza stabilność działania modelu.
+
+Warto również zauważyć, że model osiągnął nieco lepsze wyniki na zbiorze treningowym niż na testowym, zarówno przed, jak i po tuningu. Tego rodzaju różnice są naturalne, ponieważ model jest uczony bezpośrednio na danych treningowych, przez co lepiej się do nich dopasowuje. Kluczowe jest jednak to, że różnice te były niewielkie – rzędu około 0,5 punktu procentowego – co oznacza, że model dobrze generalizował na nowych danych i nie wykazywał oznak przeuczenia (overfitting).
+
+W celu pełniejszej oceny działania modelu, analizie poddano również macierz pomyłek (confusion matrix). Macierz ta przedstawia szczegółowy rozkład przewidywanych i rzeczywistych klas. Model regresji logistycznej wykazał dużą liczbę przypadków prawidłowo sklasyfikowanych jako pozytywne (True Positives) i negatywne (True Negatives), przy stosunkowo niskiej liczbie błędów – zarówno fałszywie pozytywnych (False Positives), jak i fałszywie negatywnych (False Negatives). Co istotne, błędy te były rozłożone równomiernie, co oznacza, że model nie był stronniczy wobec żadnej z klas. Taki zrównoważony rozkład potwierdza, że model zachował wysoką jakość klasyfikacji niezależnie od kategorii, do której należała obserwacja.
+
+Podsumowując, regresja logistyczna okazała się modelem skutecznym, stabilnym i dobrze dopasowanym do rozpatrywanego problemu. Jej prostota, interpretowalność oraz stosunkowo wysoka skuteczność sprawiają, że może być z powodzeniem stosowana również w praktycznych zastosowaniach analitycznych.
+
+## Decision Tree
+
+Drzewa decyzyjne są powszechnie stosowanym narzędziem w uczeniu maszynowym do podejmowania decyzji na podstawie reguł logicznych wywnioskowanych z danych. Składają się z korzenia, węzłów decyzyjnych i liści, gdzie każdy węzeł reprezentuje test na określonej cesze, a liście oznaczają decyzję lub prognozę. Proces budowy drzewa polega na podziale danych na podzbiory, które są coraz bardziej jednorodne pod względem przynależności do danej klasy. Drzewa decyzyjne nie wymagają kodowania zmiennych kategorycznych, co jest jedną z ich zalet. W odróżnieniu od niektórych innych modeli uczenia maszynowego, które wymagają kodowania zmiennych kategorycznych na liczby.
+
+```{r}
+# Decision Tree
+tree_model <- decision_tree() %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wf <- workflow() %>%
+  add_model(tree_model) %>%
+  add_recipe(recipe)
+
+tree_fit <- fit(tree_wf, data = train_set)
+```
+
+```{r}
+results_tree_train <- evaluate_model(tree_fit, train_set, truth_col = Satisfaction)
+results_tree <- evaluate_model(tree_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics3 <- results_tree_train$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics3 <- results_tree$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics3 <- left_join(train_metrics3, test_metrics3, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics3 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p5 <- autoplot(results_tree_train$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p6 <- autoplot(results_tree$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p5, p6, ncol = 2)
+
+```
+
+
+W projekcie model drzewa decyzyjnego został oceniony zarówno przed, jak i po tuningu hiperparametrów, którego celem było zwiększenie skuteczności predykcji. Przed tuningiem, na zbiorze treningowym uzyskano dokładność (accuracy) na poziomie 88,94%, a na zbiorze testowym – 88,09%. Pozostałe metryki na zbiorze testowym wyniosły: precyzja 88,01%, czułość 91,27% oraz F1-score 89,61%. Model ten dobrze radził sobie z identyfikowaniem klasy pozytywnej, jednak istniało pewne pole do poprawy.
+
+**Tuning drzewa decyzyjnego**
+
+W celu poprawy skuteczności modelu drzewa decyzyjnego przeprowadzono tuning hiperparametrów z wykorzystaniem metody siatki regularnej (grid search) oraz walidacji krzyżowej (k-fold cross-validation). Proces przeprowadzono w oparciu o 10-krotną walidację krzyżową z warstwowaniem względem zmiennej celu.
+
+Strojeniu poddano dwa kluczowe hiperparametry:
+
+-   `cost_complexity` – parametr regularyzacji złożoności drzewa (znany również jako cp). Odpowiada za minimalną poprawę jakości wymaganą do wykonania kolejnego podziału. Niższe wartości pozwalają budować bardziej złożone drzewa. Testowano wartości z zakresu od $10^{−4}$ do $10^{−1}$, zapisane logarytmicznie w przedziale od -4 do -1.
+
+-   `tree_depth` – maksymalna głębokość drzewa, czyli liczba kolejnych podziałów od korzenia do liścia. Większa głębokość pozwala uchwycić więcej niuansów w danych, ale zwiększa ryzyko przeuczenia. Przetestowano wartości od 1 do 10.
+
+Zbudowano siatkę o 25 kombinacjach hiperparametrów (5 poziomów każdego), a każda konfiguracja była oceniana z wykorzystaniem czterech metryk: accuracy, precision, recall oraz F1-score. Takie podejście pozwoliło zidentyfikować optymalny zestaw parametrów, który zapewnił największą skuteczność i zbalansowanie klasyfikacji.
+
+```{r}
+# Decision Tree - tuning
+
+#tuning decision tree 
+tree_model_tuning <- decision_tree(
+  cost_complexity = tune(),
+  tree_depth = tune()
+) %>%
+  set_engine("rpart") %>%
+  set_mode("classification")
+
+tree_wf_tuning <- workflow() %>%
+  add_model(tree_model_tuning) %>%
+  add_recipe(recipe)
+```
+
+```{r}
+set.seed(2025)
+# Podział do walidacji krzyżowej
+folds <- vfold_cv(train_set, v = 10, strata = Satisfaction)
+
+# Siatka hiperparametrów
+grid_tree <- grid_regular(
+  cost_complexity(range = c(-4, -1)),  # czyli od 1e-4 do 1e-1
+  tree_depth(range = c(1L, 10L)),
+  levels = 5
+)
+
+```
+
+```{r}
+# #Tuning modelu
+# tuned_results_tree <- tune_grid(
+#   tree_wf_tuning,
+#   resamples = folds,
+#   grid = grid_tree,
+#   metrics = metric_set(accuracy, precision, recall, f_meas)
+# )
+
+```
+
+```{r}
+#saveRDS(tuned_results_tree,"tuned_results_tree.rds")
+tuned_results_tree <- readRDS("tuned_results_tree.rds")
+```
+
+```{r}
+# Wybierz najlepsze parametry
+best_params_tree <- select_best(tuned_results_tree, "accuracy")
+
+# Finalny workflow
+final_wf_tuning <- finalize_workflow(tree_wf_tuning, best_params_tree)
+
+# Trenowanie modelu na pełnym zbiorze treningowym
+final_fit_tuning <- fit(final_wf_tuning, data = train_set)
+```
+
+```{r}
+results_tree_train_tuning <- evaluate_model(final_fit_tuning, train_set, truth_col = Satisfaction)
+
+results_tree_tuning <- evaluate_model(final_fit_tuning, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym po tuningu**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics4 <- results_tree_train_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics4 <- results_tree_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics4 <- left_join(train_metrics4, test_metrics4, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics4 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p7 <- autoplot(results_tree_train_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p8 <- autoplot(results_tree_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p7, p8, ncol = 2)
+
+```
+
+Po przeprowadzeniu tuningu hiperparametrów, model uległ istotnej poprawie. Dokładność na zbiorze testowym wzrosła do 92.73%, co oznacza wzrost o ponad 4 punkty procentowe względem wersji bazowej. Precyzja wzrosła do 92,37%, a czułość do 94,92%. F1-score osiągnął wartość 90,76%, co świadczy o lepszym zbalansowaniu modelu między skutecznym wykrywaniem przypadków pozytywnych a ograniczeniem liczby błędów klasyfikacji.
+
+Zarówno przed, jak i po tuningu, różnice między wynikami na zbiorze treningowym a testowym były niewielkie, co świadczy o dobrej zdolności generalizacji i braku istotnych oznak przeuczenia.
+
+Dodatkowo, analiza macierzy pomyłek potwierdziła, że po strojeniu model lepiej radził sobie z redukowaniem błędów w obu klasach – zmniejszyła się liczba zarówno fałszywie pozytywnych, jak i fałszywie negatywnych predykcji. To świadczy o większej stabilności działania drzewa decyzyjnego po optymalizacji parametrów.
+
+Podsumowując, tuning drzewa decyzyjnego przyniósł wyraźną poprawę wyników klasyfikacji. Model nie tylko zwiększył swoją dokładność, ale także lepiej zrównoważył relację między precyzją a czułością. Dzięki tym zmianom stał się bardziej wiarygodnym i użytecznym narzędziem w analizie predykcyjnej.
+
+## Random Forest
+
+Random Forest to technika uczenia maszynowego oparta na zasadzie tworzenia wielu drzew decyzyjnych i łączenia ich w celu uzyskania stabilnego i wydajnego modelu predykcyjnego. W przeciwieństwie do pojedynczego drzewa decyzyjnego, które może być podatne na nadmierne dopasowanie do danych treningowych, Random Forest stosuje losowe podzbiory danych oraz losowy wybór cech dla każdego drzewa, co pomaga w zmniejszeniu wariancji modelu i poprawia jego zdolność do generalizacji na nowe dane. Każde drzewo w lesie jest trenowane na losowym podzbiorze danych treningowych, a ostateczna predykcja jest dokonywana poprzez głosowanie lub uśrednianie wyników wszystkich drzew. Ta technika pozwala na budowę silnego modelu, który radzi sobie dobrze w różnych zadaniach klasyfikacji i regresji.
+
+```{r}
+# Random Forest
+rf_model <- rand_forest() %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+rf_wf <- workflow() %>%
+  add_model(rf_model) %>%
+  add_recipe(recipe)
+
+rf_fit <- fit(rf_wf, data = train_set)
+```
+
+```{r}
+results_rf_train <- evaluate_model(rf_fit, train_set, truth_col = Satisfaction)
+results_rf <- evaluate_model(rf_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics5 <- results_rf_train$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics5 <- results_rf$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics5 <- left_join(train_metrics5, test_metrics5, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics5 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p9 <- autoplot(results_rf_train$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p10 <- autoplot(results_rf$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p9, p10, ncol = 2)
+
+```
+
+W analizie Random Forest osiągnął bardzo dobre wyniki już przed tuningiem. Dokładność (accuracy) na zbiorze treningowym wyniosła 98,80%, a na testowym 94,11%, co wskazuje na niewielką różnicę (maksymalnie około 5%) i możliwe lekkie przeuczenie. Precyzja (precision) na zbiorze testowym to 93,35%, czułość (recall) – 96,39%, a F1-score – 94,85%. Mimo potencjalnego, niewielkiego przeuczenia model wykazuje dobrą skuteczność na danych testowych, co sugeruje, że jest dobrze dopasowany i generalizuje zadowalająco.
+
+**Tuning modelu Random Forest**
+
+W ramach tuningu modelu Random Forest skoncentrowano się na dostrojeniu dwóch kluczowych hiperparametrów:
+
+-   `mtry` – liczby predyktorów losowo wybieranych przy każdym podziale drzewa,
+
+-   `min_n` – minimalnej liczby obserwacji wymaganej do wykonania podziału w węźle drzewa.
+
+Liczba drzew została ustalona na stałym poziomie 100 (trees = 100), aby zachować równowagę między dokładnością a czasem obliczeń.
+
+Do przeszukiwania przestrzeni hiperparametrów zastosowano siatkę regularną (grid_regular), obejmującą:
+
+-   Zakres wartości `mtry` od 1 do 22 (czyli całkowity zakres liczby predyktorów w danych),
+
+-   Zakres wartości `min_n` od 2 do 10.
+
+Dla każdego z parametrów zdefiniowano 5 poziomów, co dało w sumie 25 kombinacji parametrów (5×5). Takie podejście pozwala na systematyczne przeszukanie przestrzeni hiperparametrów bez nadmiernego obciążenia obliczeniowego.
+
+Model z każdą kombinacją parametrów był oceniany z wykorzystaniem 10-krotnej walidacji krzyżowej, co umożliwiło wybór ustawień najlepiej dopasowanych do danych.
+
+```{r}
+# Random Forest - tuning
+
+# Model z parametrami do tuningu
+rf_model_tuning <- rand_forest(
+  mtry = tune(),
+  min_n = tune(),
+  trees = 100  # ustalamy na sztywno
+) %>%
+  set_engine("ranger") %>%
+  set_mode("classification")
+
+# Workflow
+rf_wf_tuning <- workflow() %>%
+  add_model(rf_model_tuning) %>%
+  add_recipe(recipe)
+```
+
+```{r}
+# Siatka parametrów
+grid_rf_tuning <- grid_regular(
+  mtry(range = c(1, 22)),
+  min_n(range = c(2, 10)),
+  levels = 5
+)
+```
+
+```{r}
+# set.seed(2025)
+# rf_folds <- vfold_cv(train_set, v = 10, strata = Satisfaction)
+# 
+# tuned_rf <- tune_grid(
+#   rf_wf_tuning,
+#   resamples = rf_folds,
+#   grid = grid_rf_tuning,
+#   metrics = metric_set(accuracy, precision, recall, f_meas)
+# )
+
+```
+
+```{r}
+#saveRDS(tuned_rf,"tuned_rf.rds")
+tuned_rf <- readRDS("tuned_rf.rds")
+```
+
+```{r}
+best_rf <- select_best(tuned_rf, "accuracy")
+final_rf_wf <- finalize_workflow(rf_wf_tuning, best_rf)
+final_rf_fit <- fit(final_rf_wf, data = train_set)
+```
+
+```{r}
+results_rf_train_tuning <- evaluate_model(final_rf_fit, train_set, truth_col = Satisfaction)
+results_rf_tuning <-  evaluate_model(final_rf_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym po tuningu**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics6 <- results_rf_train_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics6 <- results_rf_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics6 <- left_join(train_metrics6, test_metrics6, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics6 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p13 <- autoplot(results_rf_train_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p14 <- autoplot(results_rf_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p13, p14, ncol = 2)
+
+```
+
+Po przeprowadzeniu tuningu hiperparametrów nastąpiła dalsza poprawa skuteczności klasyfikacji. Dokładność na zbiorze testowym wzrosła do 95,59%, precyzja osiągnęła 95,55%, czułość 96,66%, a F1-score 96,10%. Jednocześnie na zbiorze treningowym model osiągnął niemal idealne wyniki – dokładność 99,91% i F1-score 99,92% – co świadczy o bardzo silnym dopasowaniu do danych uczących. Różnica rzędu 4–5 punktów procentowych pomiędzy wynikami na zbiorze treningowym a testowym sugeruje występowanie lekkiego przeuczenia. Mimo to, model utrzymał wysoką skuteczność na danych testowych, co wskazuje, że tuning hiperparametrów pozwolił na poprawę generalizacji bez znaczącej utraty precyzji klasyfikacji.
+
+Analiza macierzy pomyłek wykazała, że po tuningu model znacznie zredukował liczbę błędnych klasyfikacji. Szczególnie dobrze radził sobie z wykrywaniem przypadków pozytywnych (wysoka czułość), a także ograniczył liczbę fałszywych alarmów (wysoka precyzja). Błędy klasyfikacji były nieliczne i nie koncentrowały się na jednej klasie, co świadczy o zrównoważonym działaniu modelu.
+
+Podsumowując, Random Forest okazał się bardzo dobrym modelem w analizie. Już w wersji bazowej oferował bardzo dobre wyniki, a po tuningu osiągnął jeszcze lepszą skuteczność. Choć można zaobserwować oznaki lekkiego przeuczenia, model pozostaje stabilny, silny predykcyjnie i skutecznie radzi sobie z klasyfikacją binarną, co czyni go wartościowym kandydatem do zastosowań praktycznych.
+
+## Boosting
+
+Boosting a dokładniej Gradient Boosting Machine (GBM) to technika uczenia maszynowego, która polega na łączeniu wielu słabych modeli uczących w celu stworzenia silnego modelu predykcyjnego. W odróżnieniu od baggingu, gdzie modele uczą się niezależnie, w boostingu każdy kolejny model jest trenowany tak, aby skupić się na obszarach, w których poprzednie modele popełniły błędy. Podczas procesu trenowania, boosting waży błędnie sklasyfikowane lub źle dopasowane przykłady danych, co prowadzi do lepszego radzenia sobie z trudnymi przypadkami.
+
+```{r}
+# Boosting
+boost_model <- boost_tree(
+  trees = 100,
+  tree_depth = 3,
+  learn_rate = 0.1
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+boost_wf <- workflow() %>%
+  add_model(boost_model) %>%
+  add_recipe(recipe)
+
+boost_fit <- fit(boost_wf, data = train_set)
+
+```
+
+```{r}
+results_boost_train<- evaluate_model(boost_fit, train_set, truth_col = Satisfaction)
+results_boost<- evaluate_model(boost_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics7 <- results_boost_train$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics7 <- results_boost$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics7 <- left_join(train_metrics7, test_metrics7, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics7 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p15 <- autoplot(results_boost_train$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p16 <- autoplot(results_boost$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p15, p16, ncol = 2)
+
+```
+
+Model Boosting przed strojoną parametryzacją osiągnął bardzo dobre wyniki zarówno na zbiorze treningowym, jak i testowym. Dokładność (accuracy) na zbiorze treningowym wyniosła 94,07%, a na zbiorze testowym 93,38%. Świadczy to o dobrej zdolności modelu do generalizacji – nie wystąpiło nadmierne dopasowanie do danych treningowych.
+
+Wskaźnik precyzji (precision) wyniósł 93,56% dla zbioru treningowego i 93,35% dla testowego, co oznacza, że model rzadko klasyfikował błędnie niezadowolonych pasażerów jako zadowolonych. Z kolei wysoka czułość (recall) – odpowiednio 96,08% i 95,01% – wskazuje, że model skutecznie wychwytywał przypadki faktycznej satysfakcji pasażerów. F1-score, będący średnią harmoniczną precyzji i czułości, oscylował na poziomie ok. 94,8% dla treningu i 94,17% dla testu, co potwierdza równowagę między tymi dwoma wskaźnikami i ogólną wysoką jakość klasyfikacji
+
+Uzupełnieniem interpretacji tych wyników jest analiza macierzy konfuzji, która pozwala dokładnie ocenić, w ilu przypadkach model poprawnie przewidział klasę pozytywną (zadowolony klient) oraz klasę negatywną (niezadowolony klient). Macierz pokazuje, że większość przykładów została sklasyfikowana prawidłowo, a liczba fałszywie pozytywnych i fałszywie negatywnych wyników była relatywnie niska. To potwierdza, że model skutecznie rozróżnia obie klasy i rzadko popełnia kosztowne błędy klasyfikacyjne.
+
+**Tuning modelu Boosting (XGBoost)**
+
+W celu poprawy jakości predykcji przeprowadzono tuning hiperparametrów modelu Boosting, opartego na algorytmie XGBoost. W tym procesie dostrajano pięć najistotniejszych parametrów, mających wpływ na głębokość drzew, szybkość uczenia, regularyzację oraz losowość treningu:
+
+-   `tree_depth` – maksymalna głębokość pojedynczego drzewa; kontroluje stopień złożoności modelu. Zakres wartości: od 2 do 10.
+-   `learn_rate` – współczynnik uczenia; określa, jak dużą wagę przypisuje się każdemu kolejnemu drzewu w iteracji boostingowej. Przeszukiwany zakres logarytmiczny: od $10^{−4}$ do $10^{−1}$.
+-   `loss_reduction` – minimalna wartość zmniejszenia funkcji straty, wymagana do wykonania podziału w drzewie (odpowiednik gamma w XGBoost). Zakres: od 0.1 do 100 (logarytmicznie od -1 do 2).
+-   `sample_prop` – proporcja obserwacji losowo wybieranych do trenowania każdego drzewa (subsampling). Zakres: od 0.5 do 1.0.
+-   `mtry` – liczba predyktorów losowo wybieranych na potrzeby konstrukcji drzew; zakres: od 1 do 22 (czyli liczba predyktorów w zbiorze danych).
+
+Do przeszukiwania przestrzeni hiperparametrów zastosowano siatkę regularną (grid_regular) z trzema poziomami dla każdego parametru, co dało łącznie 243 kombinacje (3⁵).
+
+Liczba drzew (trees) została ustalona na stałym poziomie 100, aby ograniczyć czas obliczeń przy zachowaniu dobrej reprezentatywności modelu.
+
+```{r}
+# Boosting - tuning
+boost_model_tuning <- boost_tree(
+  trees = 100,
+  tree_depth = tune(),
+  learn_rate = tune(),
+  loss_reduction = tune(),
+  sample_size = tune(),
+  mtry = tune()
+) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+boost_wf_tuning <- workflow() %>%
+  add_model(boost_model_tuning) %>%
+  add_recipe(recipe)
+
+```
+
+```{r}
+grid_boost_tuning <- grid_regular(
+  tree_depth(range = c(2L, 10L)),
+  learn_rate(range = c(-4, -1)),           # 1e-4 do 1e-1
+  loss_reduction(range = c(-1, 2)),        # 0.1 do 100
+  sample_prop(range = c(0.5, 1.0)),        # subsampling
+  mtry(range = c(1, 22)),                  # bo 22 predyktory
+  levels = 3                               # 3^5 = 243 kombinacje
+)
+
+```
+
+```{r}
+# set.seed(2025)
+# folds_boost <- vfold_cv(train_set, v = 10, strata = Satisfaction)
+# 
+# tuned_boost <- tune_grid(
+#   boost_wf_tuning,
+#   resamples = folds_boost,
+#   grid = grid_boost_tuning,
+#   metrics = metric_set(accuracy, precision, recall, f_meas)
+# )
+
+```
+
+```{r}
+#saveRDS(tuned_boost,"tuned_boost.rds")
+tuned_boost <- readRDS("tuned_boost.rds")
+```
+
+```{r}
+best_boost <- select_best(tuned_boost, "accuracy")
+final_boost_wf <- finalize_workflow(boost_wf_tuning, best_boost)
+final_boost_fit <- fit(final_boost_wf, data = train_set)
+```
+
+```{r}
+results_boost_train_tuning <- evaluate_model(final_boost_fit, train_set, truth_col = Satisfaction)
+results_boost_tuning <- evaluate_model(final_boost_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym po tuningu**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics8 <- results_boost_train_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics8 <- results_boost_tuning$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics8 <- left_join(train_metrics8, test_metrics8, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics7 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p17 <- autoplot(results_boost_train_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p18 <- autoplot(results_boost_tuning$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p17, p18, ncol = 2)
+
+```
+
+Po przeprowadzeniu strojenia hiperparametrów model Boosting osiągnął jeszcze wyższą skuteczność. Na zbiorze treningowym dokładność wzrosła do 99,91%, a na zbiorze testowym do 95,59%. Precyzja wyniosła 99,86% na treningu i 95,55% na teście, zaś czułość osiągnęła imponujące wartości 99,99% i 96,66%. F1-score wyniósł 99,92% dla treningu i 96,10% dla testu, co świadczy o bardzo wysokiej jakości klasyfikacji.
+
+Macierz konfuzji po tuningu pokazała znaczący wzrost liczby trafnych klasyfikacji oraz dalszy spadek liczby błędów fałszywie pozytywnych i negatywnych. W szczególności zwiększyła się skuteczność wykrywania przypadków zadowolonych klientów, przy jednoczesnym ograniczeniu błędnych identyfikacji. Choć tak wysoka skuteczność na danych treningowych może sugerować przeuczenie, utrzymanie wysokiej jakości klasyfikacji na danych testowych wskazuje, że model jest stabilny i dobrze zoptymalizowany.
+
+## SVM
+
+SVM (Support Vector Machine) to potężny algorytm uczenia maszynowego stosowany zarówno w zadaniach klasyfikacji, jak i regresji. Jego podstawowym celem jest znalezienie optymalnej hiperpłaszczyzny lub zestawu hiperpłaszczyzn, które najlepiej separują dane wejściowe na różne klasy lub przewidują wartości dla danych numerycznych. SVM działa poprzez znalezienie hiperpłaszczyzny o największym marginesie, czyli największej możliwej odległości między punktami danych różnych klas. Punktami, które leżą najbliżej hiperpłaszczyzny, nazywane są wektorami nośnymi (support vectors), a są one kluczowe dla określenia położenia hiperpłaszczyzny decyzyjnej.
+
+```{r}
+# # SVM
+# svm_model <- svm_rbf() %>%
+#   set_engine("kernlab") %>%
+#   set_mode("classification")
+# 
+# svm_wf <- workflow() %>%
+#   add_model(svm_model) %>%
+#   add_recipe(recipe)
+# 
+# svm_fit <- fit(svm_wf, data = train_set)
+```
+
+```{r}
+#saveRDS(svm_fit,"svm_fit.rds")
+svm_fit <- readRDS("svm_fit.rds")
+```
+
+```{r}
+results_svm_train <- evaluate_model(svm_fit, train_set, truth_col = Satisfaction)
+results_svm <- evaluate_model(svm_fit, test_set, truth_col = Satisfaction)
+```
+
+**Porównanie metryk na zbiorze treningowym i testowym**
+
+```{r}
+# Przygotowanie metryk dla zbioru treningowego
+train_metrics9 <- results_svm_train$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Train = .estimate)
+
+# Przygotowanie metryk dla zbioru testowego
+test_metrics9 <- results_svm$metrics %>%
+  select(.metric, .estimate) %>%
+  rename(Test = .estimate)
+
+# Połączenie metryk i zmiana nazw
+combined_metrics9 <- left_join(train_metrics9, test_metrics9, by = ".metric") %>%
+  rename(Metryki = .metric) %>%
+  mutate(Metryki = ifelse(Metryki == "f_meas", "F1-score", Metryki))
+
+# Ładna tabela HTML
+combined_metrics9 %>%
+  kable(
+    format = "html",
+    digits = 4,
+    align = "lcc"
+  ) %>%
+  kable_styling(
+    full_width = FALSE,
+    position = "center",
+    bootstrap_options = c("striped", "hover", "condensed")
+  ) %>%
+  row_spec(0, bold = TRUE)
+```
+
+```{r, fig.width=12, fig.height=5}
+library(gridExtra)
+
+p19 <- autoplot(results_svm_train$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Train") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+p20 <- autoplot(results_svm$confusion_matrix, type = "heatmap") +
+  ggtitle("Confusion Matrix - Test") +
+  scale_fill_gradient(low = "white", high = "steelblue") +
+  theme_minimal()
+
+grid.arrange(p19, p20, ncol = 2)
+
+```
+
+Model SVM został przetestowany bez strojenia hiperparametrów i uzyskał bardzo dobre wyniki klasyfikacyjne. Na zbiorze treningowym osiągnął dokładność (accuracy) na poziomie 96,08%, natomiast na zbiorze testowym – 94,93%. Taka niewielka różnica między wynikami dla obu zbiorów świadczy o dobrej zdolności generalizacji i braku oznak przeuczenia modelu.
+
+Wskaźnik precyzji (precision) wyniósł odpowiednio 95,02% (trening) i 94,68% (test), co oznacza, że model stosunkowo rzadko błędnie klasyfikował klientów niezadowolonych jako zadowolonych. Z kolei czułość (recall) sięgnęła aż 97,62% dla zbioru treningowego i 95,94% dla testowego – czyli model dobrze rozpoznawał zadowolonych klientów. F1-score, łączący precyzję i czułość, osiągnął 96,31% na treningu i 95,31% na teście, co wskazuje na bardzo zrównoważoną jakość klasyfikacji.
+
+Analiza macierzy konfuzji potwierdziła, że model SVM trafnie klasyfikuje większość obserwacji. Liczba przypadków fałszywie pozytywnych (gdy niezadowolony klient został uznany za zadowolonego) oraz fałszywie negatywnych była niska, co przekłada się na wysoką użyteczność modelu w kontekście analizy satysfakcji klientów linii lotniczych.
+
+**Uwaga dotycząca modelu SVM:**
+
+W projekcie nie przeprowadzono tuningu hiperparametrów dla modelu SVM. Podjęta została próba optymalizacji, jednak z uwagi na ograniczenia sprzętowe komputera – w szczególności niewystarczającą moc obliczeniową i brak dedykowanego GPU – proces strojenia hiperparametrów okazał się bardzo czasochłonny. W trakcie prób proces uczenia trwał ponad 15 godzin i nie zakończył się nawet po tym czasie, co zmusiło mnie do przerwania dalszych eksperymentów. Ze względu na nieefektywność obliczeniową oraz ograniczony czas realizacji projektu, zdecydowano się pozostać przy wynikach uzyskanych dla domyślnych parametrów modelu.
+
+# Wnioski
+
+**Porównanie modeli na zbiorach Train i Test**
+
+```{r}
+library(dplyr)
+library(tidyr)
+library(yardstick)
+library(purrr)
+library(knitr)
+library(rlang)
+library(stringr)
+
+
+results <- list(
+  logistic_train = results_logistic_train,
+  logistic_test = results_logistic,
+  logistic_tuned_train = results_logistic_train_tuning,
+  logistic_tuned_test = results_logistic_tuning,
+
+  tree_train = results_tree_train,
+  tree_test = results_tree,
+  tree_tuned_train = results_tree_train_tuning,
+  tree_tuned_test = results_tree_tuning,
+
+  rf_train = results_rf_train,
+  rf_test = results_rf, 
+  rf_tuned_train = results_rf_train_tuning,
+  rf_tuned_test = results_rf_tuning,
+
+  boost_train = results_boost_train,
+  boost_test = results_boost,
+  boost_tuned_train = results_boost_train_tuning,
+  boost_tuned_test = results_boost_tuning,
+
+  svm_train = results_svm_train,
+  svm_test = results_svm
+)
+
+build_comparison_table <- function(results_list) {
+  table <- purrr::imap_dfr(results_list, function(res, name) {
+    m <- res$metrics %>%
+      filter(.metric %in% c("accuracy", "precision", "recall", "f_meas")) %>%
+      select(.metric, .estimate) %>%
+      pivot_wider(names_from = .metric, values_from = .estimate)
+
+    # Rozpoznajemy typ zbioru i nazwę modelu
+    if (str_detect(name, "_train$")) {
+      dataset <- "Train"
+      model_key <- str_remove(name, "_train$")
+    } else if (str_detect(name, "_test$")) {
+      dataset <- "Test"
+      model_key <- str_remove(name, "_test$")
+    } else {
+      dataset <- "Unknown"
+      model_key <- name
+    }
+
+    # Mapowanie na ładne nazwy
+    pretty_name <- dplyr::case_when(
+      model_key == "logistic" ~ "Regresja logistyczna",
+      model_key == "logistic_tuned" ~ "Regresja logistyczna tuning",
+      model_key == "tree" ~ "Drzewo decyzyjne",
+      model_key == "tree_tuned" ~ "Drzewo decyzyjne tuning",
+      model_key == "rf" ~ "Random Forest",
+      model_key == "rf_tuned" ~ "Random Forest tuning",
+      model_key == "boost" ~ "XGBoost",
+      model_key == "boost_tuned" ~ "XGBoost tuning",
+      model_key == "svm" ~ "SVM",
+      TRUE ~ model_key
+    )
+
+    m %>%
+      mutate(
+        Model = pretty_name,
+        Dataset = dataset
+      ) %>%
+      select(Model, Dataset, accuracy, precision, recall, f_meas)
+  })
+
+  colnames(table) <- c("Model", "Dataset", "Accuracy", "Precision", "Recall", "F1-score")
+  return(table)
+}
+
+
+comparison_table <- build_comparison_table(results)
+kable(comparison_table, digits = 4)
+```
+
+Na podstawie przedstawionych wyników można wyciągnąć wnioski, które modele sprawdziły się najlepiej. Najwyższą skuteczność na zbiorze testowym osiągnęły modele XGBoost po tuningu, Random Forest po tuningu oraz SVM. Model XGBoost tuning uzyskał najlepszy wynik F1 na danych testowych (0.9630), co oznacza bardzo dobrą równowagę między precyzją a czułością. Random Forest tuning również osiągnął bardzo dobre wyniki (F1 = 0.9610), jednak jego dokładność na zbiorze treningowym była niemal idealna (0.9991), co może wskazywać na przeuczenie. SVM, mimo że nie był dostrajany, zaprezentował się bardzo dobrze i stabilnie, osiągając F1 = 0.9552 na teście i brak dużych różnic między treningiem a testem.
+
+Regresja logistyczna, choć prostsza, dała przyzwoite wyniki (F1 = 0.9372 na teście), jednak ustępuje bardziej zaawansowanym algorytmom. Modele drzew decyzyjnych, zwłaszcza po tuningu, poprawiły swoje rezultaty, ale nadal nie osiągnęły poziomu XGBoost czy Random Forest.
+
+Widać, że najbardziej złożone modele, takie jak XGBoost i Random Forest, oferują najlepszą skuteczność, ale mogą też być podatne na przeuczenie. Z kolei SVM pokazuje, że można uzyskać bardzo dobre wyniki bez konieczności intensywnego dostrajania parametrów. Wybór najlepszego modelu powinien więc zależeć nie tylko od wskaźników, ale również od równowagi między skutecznością a ogólną zdolnością do generalizacji.
+
